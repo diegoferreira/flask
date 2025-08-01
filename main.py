@@ -60,6 +60,84 @@ def oauth2callback():
     """
     Endpoint de callback que o Google chama após o usuário dar o consentimento.
     """
+    try:
+        # 1. Obter o código de autorização da URL
+        auth_code = request.args.get('code')
+        print(f"[DEBUG] Auth code recebido: {auth_code[:10] if auth_code else 'None'}...")
+        
+        if not auth_code:
+            print("[ERROR] Código de autorização não encontrado")
+            return "Erro: Código de autorização não encontrado.", 400
+
+        # 2. Obter o user_id que foi salvo na sessão
+        user_id = session.get('user_id')
+        print(f"[DEBUG] User ID da sessão: {user_id}")
+        
+        if not user_id:
+            print("[ERROR] Sessão do usuário não encontrada")
+            return "Erro: Sessão do usuário expirada ou não encontrada. Por favor, inicie o processo novamente.", 400
+
+        # 3. Trocar o código de autorização por tokens de acesso
+        print("[DEBUG] Iniciando troca de código por tokens...")
+        
+        token_data = {
+            "code": auth_code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code"
+        }
+        
+        response = requests.post(TOKEN_URL, data=token_data)
+        print(f"[DEBUG] Status da resposta do Google: {response.status_code}")
+        
+        token_info = response.json()
+        print(f"[DEBUG] Token info recebido: {list(token_info.keys()) if token_info else 'None'}")
+
+        if response.status_code != 200:
+            print(f"[ERROR] Erro ao obter tokens: {token_info}")
+            return f"Erro ao obter tokens: {token_info}", 400
+
+        # 4. Salvar os tokens no Supabase
+        print("[DEBUG] Iniciando salvamento no Supabase...")
+        
+        try:
+            # Prepara os dados para inserir ou atualizar na tabela
+            data_to_upsert = {
+                "user_id": str(user_id),
+                "access_token": token_info["access_token"],
+                "refresh_token": token_info.get("refresh_token"),
+                "expires_in": int(token_info["expires_in"]),
+            }
+            
+            print(f"[DEBUG] Dados preparados para Supabase: user_id={user_id}, expires_in={token_info['expires_in']}")
+            
+            # Tentar inserir primeiro
+            response = supabase.table('google_tokens').insert(data_to_upsert).execute()
+            print(f"[DEBUG] Inserção no Supabase bem-sucedida")
+
+        except Exception as supabase_error:
+            print(f"[ERROR] Erro no Supabase: {supabase_error}")
+            return f"Erro ao salvar tokens no Supabase: {supabase_error}", 500
+        
+        # Limpa o user_id da sessão após o uso
+        session.pop('user_id', None)
+        print("[DEBUG] Processo concluído com sucesso")
+
+        # 5. Redirecionar para uma página de sucesso
+        return "Autorização concluída com sucesso! Você já pode fechar esta janela."
+        
+    except Exception as general_error:
+        print(f"[ERROR] Erro geral no callback: {general_error}")
+        return f"Erro interno: {general_error}", 500
+
+
+
+@app.route("/oauth3callback")
+def oauth3callback():
+    """
+    Endpoint de callback que o Google chama após o usuário dar o consentimento.
+    """
     # 1. Obter o código de autorização da URL
     auth_code = request.args.get('code')
     if not auth_code:

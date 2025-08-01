@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from urllib.parse import urlencode
 import time
+import logging
+logging.basicConfig(level=logging.INFO)
 
 # Carregar variáveis de ambiente do arquivo .env
 load_dotenv()
